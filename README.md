@@ -10,7 +10,10 @@
   1. 生成指定范围的随机整数数组；
   2. 自动生成 4 类边界用例：全相同、升序、降序、极值交替；
   3. 自动运行待测代码并计时，判定三类状态：正常完成 / RE（运行时错误）/ TLE（2 秒超时）；
-  4. 一次批量跑多组用例，逐组打印输入、状态、耗时与输出。
+  4. RE 时从 traceback 提取具体异常类型（如 ZeroDivisionError），报错信息全文打印；
+  5. 一次批量跑多组用例，逐组打印输入、状态、耗时与输出；
+  6. 复杂度分析：多档规模（N=300/1000/2000）计时、扣除子进程启动开销后估算增长幂次，预警 O(N²) 及以上的 TLE 风险；
+  7. 命令行参数指定待测代码路径（`python main.py 你的代码.py`），无需改代码。
 
 ## 二、课程知识与核心设计
 
@@ -22,30 +25,35 @@
 
 ## 三、安装与运行
 
-- **环境**：Python 3.x。只使用标准库 `random` / `subprocess` / `time` / `sys`，无任何第三方依赖。
+- **环境**：Python 3.x。只使用标准库 `random` / `subprocess` / `time` / `sys` / `os` / `math`，无任何第三方依赖。
 - **启动**：在项目根目录执行
 
   ```bash
-  python main.py
+  python main.py                        # 测试默认示例代码
+  python main.py 你的代码.py             # 测试任意代码（命令行参数指定路径）
   ```
 
 - **项目结构**：
 
   ```text
   AssignmentP/
-  ├── main.py               # 程序入口：生成数据 → 运行 → 打印结果
+  ├── main.py               # 程序入口：生成数据 → 运行 → 打印结果 → 复杂度分析
   ├── src/
   │   ├── __init__.py       # 空文件，标记 src 是 Python 包
   │   ├── generator.py      # 数据生成器（DataGenerator 类）
-  │   └── runner.py         # 代码运行器（CodeRunner 类）
+  │   ├── runner.py         # 代码运行器（CodeRunner 类 + RE 类型提取）
+  │   └── analyzer.py       # 复杂度分析器（ComplexityAnalyzer 类）
   ├── docs/
   │   └── screenshot.png    # 运行截图
   ├── examples/
-  │   └── demo_solution.py  # 示例"待测代码"（求平均值）
+  │   ├── demo_solution.py  # 示例"待测代码"（求平均值，O(N)）
+  │   ├── demo_rte.py       # 故意除零的坏代码（验证 RE 判定）
+  │   ├── demo_tle.py       # 故意死循环的坏代码（验证 TLE 判定）
+  │   └── demo_n2.py        # 故意 O(N²) 的坏代码（验证复杂度分析）
   └── README.md
   ```
 
-- **自定义测试**：改 `main.py` 顶部的 `N` 调数据规模；改 `DataGenerator(min_val=..., max_val=...)` 调数据范围；把 `CodeRunner("路径")` 换成你自己的代码文件即可测试。
+- **自定义测试**：改 `main.py` 顶部的 `N` 调数据规模、`SCALES` 调分析档位；改 `DataGenerator(min_val=..., max_val=...)` 调数据范围；命令行传路径即可测试任意代码文件。
 
 ## 四、功能展示
 
@@ -82,6 +90,28 @@
 程序输出: 44
 ```
 
+RE 检测示例（`python main.py examples/demo_rte.py`，故意除零）：
+
+```text
+--- 正在测试: all_same ---
+输入数据: 1 1 1 1 1 1 1 1 1 1
+[运行时错误] ZeroDivisionError  耗时: 0.0726s
+报错信息: Traceback (most recent call last):
+  ...
+ZeroDivisionError: integer division or modulo by zero
+```
+
+复杂度分析示例（`python main.py examples/demo_n2.py`，O(N²) 代码）：
+
+```text
+=== 复杂度分析 ===
+  N=300    耗时: 0.0349s → 扣基线后 0.0029s
+  N=1000   耗时: 0.0531s → 扣基线后 0.0211s
+  N=2000   耗时: 0.1111s → 扣基线后 0.0791s
+  相邻档位增长幂次: [1.66, 1.91]
+  结论: 大致 O(N^2)，规模翻倍耗时约翻 4 倍，注意 TLE 风险
+```
+
 ## 五、测试与结果
 
 5 组用例（N=10，范围 1~100）实测，平均值（取整）均与手算一致：
@@ -94,14 +124,14 @@
 | extreme_values | 1、100 交替 | 50 | 50 | ✓ |
 | random_case | 随机数组 | 手算 44 | 44 | ✓ |
 
-边界说明：demo 对空输入有防御分支（直接返回，不崩溃）。RE 与 TLE 两条判定路径尚未用真实坏代码实测，列为待验证项。
+边界说明：demo 对空输入有防御分支（直接返回，不崩溃）。RE 与 TLE 判定路径已用真实坏代码实测：demo_rte.py（故意除零）5 组用例全部判为 RE 并正确提取 ZeroDivisionError；demo_tle.py（故意死循环）5 组用例全部 2.0s 超时判为 TLE。
 
 ## 六、局限与改进
 
 - 目前只覆盖"一行整数数组"类题型；多行、多组、字符串等题型待扩展。
 - 尚无 **WA 检测（对拍）**：V1.2 计划加入"暴力正确解法"对比，输出不一致自动报 WA 并指出出错用例——这是核心痛点功能。
-- 尚无内存监控（MLE）与复杂度自动分析：V1.5/V2.0 计划（N=100/1000/10000 多档计时，估算 O(N) / O(N²)）。
-- 超时阈值固定 2 秒，后续改为命令行参数（argparse）。
+- 复杂度分析雏形已实现（N=300/1000/2000 三档计时、扣除启动开销后估算增长幂次）；内存监控（MLE）仍待 V1.5/V2.0。
+- 已支持命令行指定待测代码路径（sys.argv）；超时阈值固定 2 秒，其余参数化待后续用 argparse 完成。
 - 已添加 .gitignore 排除 `__pycache__` 缓存。
 
 ## 七、来源与 AI 使用声明
@@ -112,7 +142,7 @@
 本人完成的设计、修改与判断：
   · 选题与需求定义（OJ 本地样例测试器）；
   .每个小功能末以#附上自己的收获与理解
-验证方法及结果：Python 语法检查通过；运行 python main.py 得到 5 组用例结果，与手算期望值一致；RE/TLE 判定路径待后续用坏代码实测。
+验证方法及结果：Python 语法检查通过；运行 python main.py 得到 5 组用例结果，与手算期望值一致；RE/TLE 判定路径已用坏代码（demo_rte.py / demo_tle.py）实测通过；复杂度分析器经 O(N²) 代码（demo_n2.py）验证可正确预警。
 代表性协作案例或记录位置：DeepSeek 对话"大作业"；Qoder 会话开发记录。
 引用与复用的外部资源：Python 标准库（random、subprocess、time、sys）；《课程大作业说明及评分标准》（Hongfei Yan，2026 fall）。
 ```
