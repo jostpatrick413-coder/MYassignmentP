@@ -1,5 +1,6 @@
 # main.py —— OJ 本地样例测试器 v1.2 的入口
 import argparse
+import os
 from src.generator import DataGenerator
 from src.runner import CodeRunner
 from src.analyzer import ComplexityAnalyzer
@@ -15,23 +16,35 @@ def main():
     # 跑完 5 组用例后，是否追加复杂度分析
     parser.add_argument("--analyze", action="store_true", default=True, help="追加复杂度分析（默认开启）")
     parser.add_argument("--no-analyze", dest="analyze", action="store_false", help="跳过复杂度分析")
-    parser.add_argument("--code", default="examples/demo_solution.py", help="待测代码路径")
+    parser.add_argument("--code", default=None, help="待测代码路径（缺省：有 --pid 用 <题号>.py，否则 demo_solution）")
     parser.add_argument("--min", type=int, default=1, help="随机数据最小值")
     parser.add_argument("--max", type=int, default=100, help="随机数据最大值")
     parser.add_argument("--timeout", type=float, default=2.0, help="单组超时阈值（秒）")
     parser.add_argument("--check", action="store_true", help="开启对拍模式（WA 检测）")
-    parser.add_argument("--brute", default=None, help="对拍裁判（暴力解）路径，缺省用 demo_solution")
+    parser.add_argument("--brute", default=None, help="对拍裁判（暴力解）路径，缺省按 --pid 找 solutions/<题号>.py")
+    parser.add_argument("--pid", type=int, default=None, help="题号：按约定自动定位待测代码与裁判")
     args = parser.parse_args()   # 解析：命令行原始字符串对照规则，结果装进 args 托盘
+
+    # 待测代码三选一：--code 显式给 > 按 --pid 拼 "题号.py" > 默认 demo
+    code_path = args.code or (f"{args.pid}.py" if args.pid else "examples/demo_solution.py")
+    if not os.path.exists(code_path):
+        print(f"找不到待测代码: {code_path}（约定：按题号命名，如 30012.py）")
+        return
 
     print("=== OJ 本地样例测试器 (v1.2) ===")
     print()
 
     generator = DataGenerator(min_val=args.min, max_val=args.max)   # 数据范围来自命令行
-    runner = CodeRunner(args.code, timeout=args.timeout)            # 待测代码与超时都来自命令行
+    runner = CodeRunner(code_path, timeout=args.timeout)            # 待测代码与超时都来自命令行
 
     if args.check:
-        brute_path = args.brute if args.brute else "examples/demo_solution.py"
-        Comparator(generator, rounds=20, small_n=5, timeout=args.timeout).check(args.code, brute_path)
+        # 裁判三选一：--brute 显式给 > 按 --pid 找 solutions/<题号>.py > 默认 demo
+        brute_path = args.brute or (f"solutions/{args.pid}.py" if args.pid else "examples/demo_solution.py")
+        if not os.path.exists(brute_path):
+            print(f"找不到裁判: {brute_path}")
+            print("对拍需要一份你确信正确的解：把你 AC 过的代码存进 solutions/（文件名 = 题号）")
+            return
+        Comparator(generator, rounds=20, small_n=5, timeout=args.timeout).check(code_path, brute_path)
         return
 
     test_cases = generator.generate_edge_cases(args.n)       # 4 组边界用例
@@ -82,3 +95,19 @@ if __name__ == "__main__":
 # 【复用/组合】ComplexityAnalyzer(generator, runner) 把现成的生成器和运行器"借"给分析器
 #   （传的是同一个对象，不是复制品），计时与判定逻辑只写一份、两处同标准。
 #   analyzer.analyze(SCALES) 再传三档规模 [300, 1000, 2000] 开始分析。
+# 【--pid 题号约定】约定优于配置：不传一堆路径，只报题号，按约定位置自动找文件。
+#   待测默认 "<题号>.py"（当前目录），裁判默认 "solutions/<题号>.py"。
+# 【args.code or (…)】or 的短路：左边是 None（"假"）就返回右边，否则返回左边——链式兜底。
+# 【f"{args.pid}.py"】路径是拼出来的字符串：30012 → "30012.py"；f"solutions/{args.pid}.py" 同理。
+# 【os.path.exists(路径)】问操作系统"这个文件在不在"，返回 True/False。
+#   先检查再运行：subprocess 找不到文件只会吐一堆报错，先检查能给出友好提示。
+# 【.gitignore】列在里面的路径 git 视而不见：solutions/ 题库只留本地，不进公开仓库（学术诚信）。
+# 【os 模块】os = operating system，Python 与操作系统的传话筒：问文件、列目录、看环境变量。
+#   模块里装着两种东西：函数（动词，如 os.path.exists）和数据（名词，如 os.environ）。
+#   os.path 是子模块（模块套模块），专管路径这一摊事。
+# 【os.path.exists(路径)】问"这文件在不在"，只回答 True/False——只问不碰，不打开不读内容。
+#   配套：os.path.isfile 只认文件、os.path.isdir 只认文件夹、os.path.join 按系统规范拼路径
+#   （Windows 反斜杠 / Linux 正斜杠，比手拼 f-string 更稳）、os.getcwd 当前目录、os.listdir 列目录。
+# 【if not os.path.exists(...): return】卫语句（guard clause）：先把异常情况在门口拦掉，
+#   主流程就不用裹进层层 if-else。类比门卫：没证件直接请回。
+# 【自学招】dir(模块) 列全部成员；help(函数) 或 函数.__doc__ 看自带说明书。

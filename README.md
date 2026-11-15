@@ -6,14 +6,16 @@
 
 - **面向谁**：正在上计算概论、被 OJ 判题困扰的同学（第一用户就是作者本人）。
 - **解决什么问题**：OJ 判 WA 时看不到输入数据和报错细节；本地手造测试数据又慢又覆盖不到边界情况。
-- **已完成功能（V1.0）**：
+- **已完成功能（V1.2）**：
   1. 生成指定范围的随机整数数组；
   2. 自动生成 4 类边界用例：全相同、升序、降序、极值交替；
   3. 自动运行待测代码并计时，判定三类状态：正常完成 / RE（运行时错误）/ TLE（2 秒超时）；
   4. RE 时从 traceback 提取具体异常类型（如 ZeroDivisionError），报错信息全文打印；
   5. 一次批量跑多组用例，逐组打印输入、状态、耗时与输出；
   6. 复杂度分析：多档规模（N=300/1000/2000）计时、扣除子进程启动开销后估算增长幂次，预警 O(N²) 及以上的 TLE 风险；
-  7. 命令行参数指定待测代码路径（`python main.py 你的代码.py`），无需改代码。
+  7. 命令行参数化（argparse）：`--code / --check / --brute / --pid / --n / --min / --max / --timeout / --analyze`，附免费 `--help` 说明书；
+  8. 对拍（WA 检测，V1.2）：以"暴力解/AC 代码"当裁判，随机小样例双跑比对，输出不一致立刻报 WA 并给出出错输入与两边输出；
+  9. 题号约定（约定优于配置）：`--pid 30012` 自动按约定定位待测代码 `<题号>.py` 与裁判 `solutions/<题号>.py`。
 
 ## 二、课程知识与核心设计
 
@@ -22,38 +24,47 @@
 - **计时**：`time.time()` 在子进程运行前后取差值。
 - **复杂度**：`generate_array` 与 `generate_edge_cases` 均为 O(n)；单组测试的额外开销为常数，耗时瓶颈在待测代码自身。
 - **列表推导式**：`[random.randint(...) for _ in range(n)]` 一行生成随机数组，比 for 循环逐个 append 更简洁。
+- **对拍（差分测试）**：同一份输入喂给两份代码——待测代码与"暴力解/AC 代码"裁判，逐字比对输出。裁判必须"笨但一定对"（把题意原封不动写成代码、放弃优化），且用小规模随机数据（暴力解才跑得动）；逐字比对字符串还能顺带抓出输出格式错误。
+- **约定优于配置**：约定"按题号命名"（待测 `<题号>.py`、裁判 `solutions/<题号>.py`），命令行只传题号，程序按约定位置自动找文件。
 
 ## 三、安装与运行
 
-- **环境**：Python 3.x。只使用标准库 `random` / `subprocess` / `time` / `sys` / `os` / `math`，无任何第三方依赖。
+- **环境**：Python 3.x。只使用标准库 `random` / `subprocess` / `time` / `sys` / `os` / `math` / `argparse`，无任何第三方依赖。
 - **启动**：在项目根目录执行
 
   ```bash
-  python main.py                        # 测试默认示例代码
-  python main.py 你的代码.py             # 测试任意代码（命令行参数指定路径）
+  python main.py                                        # 默认：常规 5 组用例 + 复杂度分析
+  python main.py --code 你的代码.py --no-analyze          # 测任意代码，跳过分析
+  python main.py --check --code examples/demo_wa.py      # 对拍：坏代码立刻现形
+  python main.py --check --pid 30012                     # 题号约定：自动找 solutions/30012.py 当裁判
+  python main.py --code examples/demo_tle.py --timeout 1.0   # 自定义超时阈值
+  python main.py --help                                  # 参数说明书
   ```
 
 - **项目结构**：
 
   ```text
   AssignmentP/
-  ├── main.py               # 程序入口：生成数据 → 运行 → 打印结果 → 复杂度分析
+  ├── main.py               # 程序入口：参数解析 → 生成数据 → 运行/对拍 → 复杂度分析
   ├── src/
   │   ├── __init__.py       # 空文件，标记 src 是 Python 包
   │   ├── generator.py      # 数据生成器（DataGenerator 类）
   │   ├── runner.py         # 代码运行器（CodeRunner 类 + RE 类型提取）
-  │   └── analyzer.py       # 复杂度分析器（ComplexityAnalyzer 类）
+  │   ├── analyzer.py       # 复杂度分析器（ComplexityAnalyzer 类）
+  │   └── checker.py        # 对拍器（Comparator 类，WA 检测）
   ├── docs/
   │   └── screenshot.png    # 运行截图
   ├── examples/
   │   ├── demo_solution.py  # 示例"待测代码"（求平均值，O(N)）
   │   ├── demo_rte.py       # 故意除零的坏代码（验证 RE 判定）
   │   ├── demo_tle.py       # 故意死循环的坏代码（验证 TLE 判定）
-  │   └── demo_n2.py        # 故意 O(N²) 的坏代码（验证复杂度分析）
+  │   ├── demo_n2.py        # 故意 O(N²) 的坏代码（验证复杂度分析）
+  │   └── demo_wa.py        # 故意算错的坏代码（验证对拍抓 WA）
+  ├── solutions/            # 本地 AC 题库（约定：文件名 = 题号；已 gitignore，不入库）
   └── README.md
   ```
 
-- **自定义测试**：改 `main.py` 顶部的 `N` 调数据规模、`SCALES` 调分析档位；改 `DataGenerator(min_val=..., max_val=...)` 调数据范围；命令行传路径即可测试任意代码文件。
+- **自定义测试**：数据规模 `--n`、范围 `--min/--max`、超时 `--timeout`、待测代码 `--code`、对拍 `--check` 全部命令行可调；`--pid 题号` 走题号约定（待测 `<题号>.py`，裁判 `solutions/<题号>.py`）；`--help` 查看全部参数。
 
 ## 四、功能展示
 
@@ -112,6 +123,20 @@ ZeroDivisionError: integer division or modulo by zero
   结论: 大致 O(N^2)，规模翻倍耗时约翻 4 倍，注意 TLE 风险
 ```
 
+对拍示例（`python main.py --check --code examples/demo_wa.py`，坏代码 vs 默认裁判 demo_solution）：
+
+```text
+=== 对拍模式 (WA 检测) ===
+待测代码: examples/demo_wa.py
+暴力解(裁判): examples/demo_solution.py
+随机样例: 10 组，每组 N=5
+
+[WA] 第 1 组就抓到了！
+输入数据: 15 15 12 74 61
+暴力解输出(期望): 35
+待测代码输出(实际): 44
+```
+
 ## 五、测试与结果
 
 5 组用例（N=10，范围 1~100）实测，平均值（取整）均与手算一致：
@@ -124,15 +149,24 @@ ZeroDivisionError: integer division or modulo by zero
 | extreme_values | 1、100 交替 | 50 | 50 | ✓ |
 | random_case | 随机数组 | 手算 44 | 44 | ✓ |
 
-边界说明：demo 对空输入有防御分支（直接返回，不崩溃）。RE 与 TLE 判定路径已用真实坏代码实测：demo_rte.py（故意除零）5 组用例全部判为 RE 并正确提取 ZeroDivisionError；demo_tle.py（故意死循环）5 组用例全部 2.0s 超时判为 TLE。
+边界说明：demo 对空输入有防御分支（直接返回，不崩溃）。RE 与 TLE 判定路径已用真实坏代码实测：demo_rte.py（故意除零）5 组用例全部判为 RE 并正确提取 ZeroDivisionError；demo_tle.py（故意死循环）5 组用例全部超时判为 TLE（阈值经 `--timeout` 可调，实测 1.0s 生效）。
+
+对拍实测（20 组随机小样例，N=5）：
+
+| 场景 | 待测 | 裁判 | 结果 |
+| :--- | :--- | :--- | :--- |
+| 抓 WA | demo_wa.py（分母 n-1） | demo_solution.py | 第 1 组即报 WA，输入与两边输出全部指出 ✓ |
+| 通过 | demo_solution.py | demo_solution.py | 20 组全部一致 ✓ |
+| 题号自动定位 | demo_wa.py | `--pid 30012` → solutions/30012.py | 自动找到裁判并抓出 WA ✓ |
+| 缺裁判 | 任意 | `--pid 99999` | 友好提示"先存 AC 代码"，不闷声报错 ✓ |
 
 ## 六、局限与改进
 
-- 目前只覆盖"一行整数数组"类题型；多行、多组、字符串等题型待扩展。
-- 尚无 **WA 检测（对拍）**：V1.2 计划加入"暴力正确解法"对比，输出不一致自动报 WA 并指出出错用例——这是核心痛点功能。
+- **对拍（WA 检测，V1.2）已完成，但定位是"机制验证 / 思路展示"**：真正投入使用需要持续积累 AC 题库（`solutions/`，每人本地自建、不入库），并需要为每题补充输入格式描述——目前只覆盖"一行整数数组"类题型，多行、多组、字符串等题型待扩展。
+- 尚无输出格式的专项检测（对拍逐字比对可顺带抓格式差异）；尚无固定随机种子（`--seed`），随机样例不可复现。
 - 复杂度分析雏形已实现（N=300/1000/2000 三档计时、扣除启动开销后估算增长幂次）；内存监控（MLE）仍待 V1.5/V2.0。
-- 已支持命令行指定待测代码路径（sys.argv）；超时阈值固定 2 秒，其余参数化待后续用 argparse 完成。
-- 已添加 .gitignore 排除 `__pycache__` 缓存。
+- 参数化已用 argparse 完成（`--code / --check / --brute / --pid / --n / --min / --max / --timeout / --analyze`）。
+- 已添加 .gitignore 排除 `__pycache__` 缓存与 `solutions/` 本地题库（公开仓库不放题解，避免学术诚信问题）。
 
 ## 七、来源与 AI 使用声明
 
@@ -142,7 +176,7 @@ ZeroDivisionError: integer division or modulo by zero
 本人完成的设计、修改与判断：
   · 选题与需求定义（OJ 本地样例测试器）；
   .每个小功能末以#附上自己的收获与理解
-验证方法及结果：Python 语法检查通过；运行 python main.py 得到 5 组用例结果，与手算期望值一致；RE/TLE 判定路径已用坏代码（demo_rte.py / demo_tle.py）实测通过；复杂度分析器经 O(N²) 代码（demo_n2.py）验证可正确预警。
+验证方法及结果：Python 语法检查通过；运行 python main.py 得到 5 组用例结果，与手算期望值一致；RE/TLE 判定路径已用坏代码（demo_rte.py / demo_tle.py）实测通过；复杂度分析器经 O(N²) 代码（demo_n2.py）验证可正确预警；对拍经坏代码（demo_wa.py，分母 n-1）实测：第 1 组随机样例即报 WA 并给出输入与两边输出；--pid 题号约定的自动定位/缺裁判提示两条路径均已实测。
 代表性协作案例或记录位置：DeepSeek 对话"大作业"；Qoder 会话开发记录。
 引用与复用的外部资源：Python 标准库（random、subprocess、time、sys）；《课程大作业说明及评分标准》（Hongfei Yan，2026 fall）。
 ```
