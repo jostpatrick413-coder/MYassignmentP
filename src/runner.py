@@ -3,8 +3,9 @@ import subprocess
 import time
 
 class CodeRunner:
-    def __init__(self, code_path):
+    def __init__(self, code_path, timeout=2.0):  # 超过 2 秒判定为 TLE
         self.code_path = code_path
+        self.timeout = timeout   # 超时阈值存起来，subprocess 和 TLE 判定共用
 
     def run_test(self, input_data):
         start_time = time.time()
@@ -14,7 +15,7 @@ class CodeRunner:
                 input=input_data,
                 text=True,             #按文本输入数据，并捕获输出
                 capture_output=True,
-                timeout=2.0,  # 超过 2 秒判定为 TLE
+                timeout=self.timeout,
                 encoding="utf-8",      # 统一按 UTF-8 解码子进程的输出
                 errors="replace",      # 解不了的字节用占位符代替，不让测试器崩掉
                 env={**os.environ, "PYTHONIOENCODING": "utf-8"}  # 让子进程也按 UTF-8 输出
@@ -28,7 +29,7 @@ class CodeRunner:
             return "Finished", elapsed_time, result.stdout.strip()  #正常
 
         except subprocess.TimeoutExpired:  #超时
-            return "TLE (Time Limit Exceeded)", 2.0, "代码运行超时，可能有死循环！"
+            return "TLE (Time Limit Exceeded)", self.timeout, "代码运行超时，可能有死循环！"
 #subprocessrun：第一行，输入解释器和代码；
 #第二行，输入input；
 #第三行，文本编译，方便操作；
