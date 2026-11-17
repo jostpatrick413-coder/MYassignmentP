@@ -60,3 +60,6 @@ def extract_error_type(stderr_text):
 # 【f-string】f"RE ({error_type})" 的 f 是格式化：把花括号里变量的值塞进字符串。不是正则！
 # 【extract_error_type 思路】traceback 最后一行形如 "ZeroDivisionError: ..."：倒着逐行找
 #   以 Error/Exception 结尾的词就是异常类型；stderr 为空（极端情况）兜底返回 "Runtime Error"。
+# ==== 学习笔记（本轮新增，精简版）====
+# 【墙钟噪声】time.time() 测的是物理时间的真实流逝，CPU 忙闲都会影响它：同一份代码每次耗时都不同，
+#   而且与随机种子无关——种子固定的是数据流，不是时钟。计时永远是带噪声的测量。

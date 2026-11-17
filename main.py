@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--code", default=None, help="待测代码路径（缺省：有 --pid 用 <题号>.py，否则 demo_solution）")
     parser.add_argument("--min", type=int, default=1, help="随机数据最小值")
     parser.add_argument("--max", type=int, default=100, help="随机数据最大值")
+    parser.add_argument("--seed", type=int, default=None, help="随机种子：同一 seed 每次生成相同数据（抓 WA 后可复现）")
     parser.add_argument("--timeout", type=float, default=2.0, help="单组超时阈值（秒）")
     parser.add_argument("--check", action="store_true", help="开启对拍模式（WA 检测）")
     parser.add_argument("--brute", default=None, help="对拍裁判（暴力解）路径，缺省按 --pid 找 solutions/<题号>.py")
@@ -34,7 +35,7 @@ def main():
     print("=== OJ 本地样例测试器 (v1.2) ===")
     print()
 
-    generator = DataGenerator(min_val=args.min, max_val=args.max)   # 数据范围来自命令行
+    generator = DataGenerator(min_val=args.min, max_val=args.max, seed=args.seed)  # 数据范围与种子都来自命令行
     runner = CodeRunner(code_path, timeout=args.timeout)            # 待测代码与超时都来自命令行
 
     if args.check:
@@ -111,3 +112,18 @@ if __name__ == "__main__":
 # 【if not os.path.exists(...): return】卫语句（guard clause）：先把异常情况在门口拦掉，
 #   主流程就不用裹进层层 if-else。类比门卫：没证件直接请回。
 # 【自学招】dir(模块) 列全部成员；help(函数) 或 函数.__doc__ 看自带说明书。
+# ==== 学习笔记（--seed 本轮新增，精简版）====
+# 【可复现性】随机样例最大的敌人是"跑了就没了"：这次抓的 WA 下次重现不了。
+#   固定种子后同一命令重跑，输入数据逐字节相同——复现、截图、发给同学，都是同一份。
+# 【seed 传递链】命令行 --seed → args.seed → DataGenerator(seed=...) → random.seed()。
+#   普通测试与对拍共用一个 generator 对象，所以一个参数、两处同时生效。
+# 【type=int + default=None】与 --pid 同一配方：整数校验 + None 表示"未指定"。None 是"假"，
+#   所以还能塞进 args.code or ... 这类短路链里继续兜底。
+# ==== 学习笔记（实测与验证方法，本轮新增，精简版）====
+# 【种子管数据，不管耗时】同 seed 保证"输入数据"逐字一致；耗时是墙钟时间（物理世界真实流逝），
+#   不是随机数，种子管不着。验证可复现性只比数据行，不比耗时行。
+# 【测试命令四件套】| 管道=水管（左边程序的打印接给右边当输入）；grep=滤网（只放行含关键词的行）；
+#   2>&1=并流阀（2号报错口并进1号正常口，管道默认只接1号口）；$(...)=接水桶（把结果存进变量）。
+# 【命令与项目的关系】测试命令是"遥控器"，项目是"电视机"：唯一接触点 = main.py 的命令行界面，
+#   方向单向、从外向内；项目只管 print，不知道谁在看。外部命令依赖输出格式（契约）——
+#   改 print 的文字，靠它吃饭的 grep 就会失明。
