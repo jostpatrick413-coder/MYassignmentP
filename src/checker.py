@@ -1,5 +1,10 @@
-# src/checker.py —— 对拍器：用"暴力解"当裁判，随机小样例双跑比对，抓 WA
+# src/checker.py —— 对拍器：用"暴力解"当裁判，随机小样例双跑比对，抓 WA / 辨 PE
 from src.runner import CodeRunner
+
+def normalize(text):
+    # 归一化：把任意连续空白（空格/换行/制表）折叠成单个空格，再掐头去尾
+    # "46 5"、"46\n5"、"46\n\n5  " 归一化后都是 "46 5" —— 数值顺序不变，只洗摆法
+    return " ".join(text.split())
 
 class Comparator:
     def __init__(self, generator, rounds=20, small_n=5, timeout=2.0):
@@ -9,7 +14,7 @@ class Comparator:
         self.timeout = timeout       # 与 main 的 --timeout 同源
 
     def check(self, code_path, brute_path):
-        print("=== 对拍模式 (WA 检测) ===")
+        print("=== 对拍模式 (WA / PE 检测) ===")
         print(f"待测代码: {code_path}")
         print(f"暴力解(裁判): {brute_path}")
         print(f"随机样例: {self.rounds} 组，每组 N={self.small_n}")
@@ -32,14 +37,23 @@ class Comparator:
                 print("对拍中止：先修掉 RE/TLE 再来抓 WA")
                 return
 
-            if out1 != out2:  # 逐字比对：连多空格、多换行都算错
-                print(f"[WA] 第 {i} 组就抓到了！")
-                print(f"输入数据: {input_str}")
-                print(f"暴力解输出(期望): {out2}")
-                print(f"待测代码输出(实际): {out1}")
+            if out1 != out2:  # 逐字比对：连多空格、多换行都算不一致
+                if normalize(out1) == normalize(out2):
+                    # 归一化后一致 = 数值全对、只差空白摆法 → PE（格式错误），不是真 WA
+                    print(f"[PE 格式错误] 第 {i} 组就抓到了！")
+                    print(f"输入数据: {input_str}")
+                    print("归一化后两边完全一致：数值全对，只差空白（空格/换行摆法）")
+                    print(f"暴力解输出(期望,原始): {out2!r}")
+                    print(f"待测代码输出(实际,原始): {out1!r}")
+                    print("提示：逐字比对仍判不一致；各 OJ 对 PE 容忍度不同，以 OJ 判定为准")
+                else:
+                    print(f"[WA] 第 {i} 组就抓到了！")
+                    print(f"输入数据: {input_str}")
+                    print(f"暴力解输出(期望): {out2}")
+                    print(f"待测代码输出(实际): {out1}")
                 return
 
-        print(f"[通过] {self.rounds} 组随机样例全部一致，未抓到 WA")
+        print(f"[通过] {self.rounds} 组随机样例逐字全部一致，未抓到 WA/PE")
 
 # ==== 学习笔记（本文件全解，精简版）====
 # 【对拍思想】同一份输入喂两份代码：待测 + 暴力解（裁判）。输出不一致 → 待测 WA。
@@ -52,3 +66,13 @@ class Comparator:
 # ==== 学习笔记（本轮新增，精简版）====
 # 【对拍输出天然可复现】checker 不打印耗时（只报输入、两边输出、WA），所以同 seed 下两次对拍
 #   完整输出逐字一致——验证"种子可复现"时，对拍模式是最干净的比对对象（无墙钟噪声混入）。
+# ==== 学习笔记（PE 检测本轮新增，精简版）====
+# 【归一化】normalize = " ".join(text.split())：split() 不带参数 = 按"任意连续空白"切词
+#   （空格/换行/制表都算、连成一片算一刀）；join 用单个空格拼回。效果：所有空白折叠成一个空格。
+# 【三层判定】逐字一致 → 通过；逐字不同但归一化一致 → PE（数值全对、只差摆法）；
+#   归一化仍不同 → 真 WA。黑箱被拆成三层，PE 不再是冷冰冰的 WA。
+# 【!r = repr】f"{out2!r}" 让字符串里看不见的字符显形：\n 显示成 \n、空格原样可见。
+#   报告里摆出两边的"原始长相"，PE 差异一眼看清——透明报告的关键一招。
+# 【归一化不会洗白 WA】它只折叠空白、绝不碰数字：数值错就是错，折叠后照样对不上。
+# 【边界】runner 收到子进程输出时已 strip() 掐头去尾，"末尾多空行/行尾多空格"进比对前就没了；
+#   本工具的 PE 检测聚焦"输出内部"的空白差异；各 OJ 对 PE 容忍度不同，诊断仅供参考、以 OJ 为准。
