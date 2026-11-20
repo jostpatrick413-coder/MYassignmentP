@@ -2,7 +2,7 @@
 import argparse
 import os
 from src.generator import DataGenerator
-from src.runner import CodeRunner
+from src.runner import CodeRunner, extract_crash_location
 from src.analyzer import ComplexityAnalyzer
 from src.checker import Comparator
 
@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--max", type=int, default=100, help="随机数据最大值")
     parser.add_argument("--seed", type=int, default=None, help="随机种子：同一 seed 每次生成相同数据（抓 WA 后可复现）")
     parser.add_argument("--timeout", type=float, default=2.0, help="单组超时阈值（秒）")
-    parser.add_argument("--check", action="store_true", help="开启对拍模式（WA 检测）")
+    parser.add_argument("--check", action="store_true", help="开启对拍模式（WA / PE 检测）")
     parser.add_argument("--brute", default=None, help="对拍裁判（暴力解）路径，缺省按 --pid 找 solutions/<题号>.py")
     parser.add_argument("--pid", type=int, default=None, help="题号：按约定自动定位待测代码与裁判")
     args = parser.parse_args()   # 解析：命令行原始字符串对照规则，结果装进 args 托盘
@@ -54,7 +54,7 @@ def main():
     for name, arr in test_cases.items():                # 逐个用例测试
         input_str = " ".join(map(str, arr))             # 把列表拼成 "3 1 4 ..." 形式的字符串
         print(f"--- 正在测试: {name} ---")
-        print(f"输入数据: {input_str}")
+        print(f"输入数据: {input_str if input_str else '(空数组)'}")   # 空数组显示 (空数组)，不然只剩孤零零的"输入数据:"
 
         status, elapsed, output = runner.run_test(input_str)  # 核心：调用你的 runner
 
@@ -64,6 +64,12 @@ def main():
         elif status.startswith("RE"):
             error_name = status.split("(", 1)[1].rstrip(")")  # 括号里是具体异常类型
             print(f"[运行时错误] {error_name}  耗时: {elapsed:.4f}s")
+            loc = extract_crash_location(output)              # 从 traceback 里提炼崩溃位置
+            if loc:
+                fname, lineno, code_line = loc
+                print(f"崩溃位置: {fname} 第 {lineno} 行")
+                if code_line:
+                    print(f"出错代码: {code_line.strip()}")
             print(f"报错信息: {output}")
         elif status == "TLE (Time Limit Exceeded)":
             print(f"[超时 TLE] 判定时间: {elapsed:.1f}s")
@@ -127,3 +133,10 @@ if __name__ == "__main__":
 # 【命令与项目的关系】测试命令是"遥控器"，项目是"电视机"：唯一接触点 = main.py 的命令行界面，
 #   方向单向、从外向内；项目只管 print，不知道谁在看。外部命令依赖输出格式（契约）——
 #   改 print 的文字，靠它吃饭的 grep 就会失明。
+# ==== 学习笔记（边界补全与 RE 结构化报告，本轮新增，精简版）====
+# 【三元表达式】input_str if input_str else '(空数组)'：if 是"真"就用它自己，否则用备胎文案。
+#   空数组 join 出来是空字符串 ""，而 "" 是"假"——所以它顺手兼任了"判空开关"。
+#   一个字符串的真假 = 它长不长（非空为真）；同理 0、None、[] 都是"假"。
+# 【职责分工】runner 管"挖"：extract_crash_location 从报错文本里提炼出 (文件名, 行号, 出错代码)；
+#   main 管"摆"：拿到三元组后决定怎么打印。挖不到就返回 None，main 走 if loc 兜底，照旧打印全文。
+#   好处：谁也不用知道对方内部的脏活——main 只认"要么三元组、要么 None"这一张名片。

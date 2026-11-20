@@ -17,7 +17,12 @@ class DataGenerator:
             "all_same": [self.min_val] * n,               # 比如全是 1
             "already_sorted": list(range(1, n + 1)),      # 1 到 n 升序，共 n 个数
             "reverse_sorted": list(range(n, 0, -1)),      # 10 到 1 降序
-            "extreme_values": [self.min_val if i % 2 == 0 else self.max_val for i in range(n)]  # 极值交替，共 n 个
+            "extreme_values": [self.min_val if i % 2 == 0 else self.max_val for i in range(n)],  # 极值交替，共 n 个
+            "empty": [],                                  # 空数组：len=0，除法/取模题第一崩溃点
+            "single": [self.max_val],                     # 单元素：下标越界高发场景
+            "all_zero": [0] * n,                          # 全 0：求和/除法翻车点
+            "zero_alt": [0 if i % 2 == 0 else self.max_val for i in range(n)],  # 0 与极值交替，比全 0 更隐蔽
+            "neg_pos_alt": [-self.max_val if i % 2 == 0 else self.max_val for i in range(n)],  # 负正交替：符号试金石
         }
 #randint（a，b）为a<=x<=b的随机整数生成器
 #class创建了一个类，函数的相关初始值为min=1，max=100
@@ -33,3 +38,12 @@ class DataGenerator:
 #   给了种子 → 每次相同，抓到的 WA 才能复现。两种需求、一个参数。
 # 【随机只在生成器里】随机数只从 DataGenerator 出生，seed 就该长在它身上；
 #   runner 只负责跑代码，不造数据，不该管种子。
+# ==== 学习笔记（边界补全本轮新增，精简版）====
+# 【边界三维度】排列形态（全同/升降序/交替）之外，还有两个更致命的维度：
+#   规模边界（空数组/单元素：len 相关代码的崩溃点）与值域边界（0/负数：除法与符号的翻车点）。
+#   随机数据范围 1~100 永远造不出这两类——坏代码在"看起来正常"的数据下安然无恙，
+#   边界用例的价值就是逼它现形。
+# 【空数组 ≠ 空字符串】[] 是"长度为 0 的列表"，拼成输入串后是 ""；子进程读到空 stdin。
+#   没写防御的代码（sum//len）当场 ZeroDivisionError——这正是要抓给用户看的。
+# 【单元素】只跑一轮的循环最容易暴露下标越界（比如访问 arr[1]）；single 顺手用 max_val 测极值。
+# 【确定性】新边界全是固定模式、不吃随机数：与 --seed 无关，任何环境跑出来的输入都一样。
