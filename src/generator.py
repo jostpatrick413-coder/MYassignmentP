@@ -1,12 +1,13 @@
 import random
 
 class DataGenerator:
-    def __init__(self, min_val=1, max_val=100, seed=None, rows=1, cols=10, alphabet=None):
+    def __init__(self, min_val=1, max_val=100, seed=None, rows=1, cols=10, alphabet=None, header=False):
         self.min_val = min_val
         self.max_val = max_val
         self.rows = rows   # 行数旋钮：int = 固定；tuple(小,大) = 每个用例掷一次
         self.cols = cols   # 每行输入数旋钮：int = 每行一样多；tuple = 每行各自掷（不定行）
         self.alphabet = alphabet or None   # 符号模式开关：给了字符集合就掷符号；None（或空串）= 照旧掷整数
+        self.header = header   # 形状模板开关：True = 首行参数（第一行 N + N 个值），矩形旋钮换语义
         if seed is not None:   # 给了种子就固定"随机"序列；不给则每次交给系统，各不相同
             random.seed(seed)
 
@@ -46,6 +47,8 @@ class DataGenerator:
 
     def make_case(self, name):
         # 按名造一个用例（重造机制每次调用它重新掷形状与数值）
+        if self.header:                                 # 首行参数模板：形状换成"第一行 N + N 个值"，旋钮语义见 _make_header_case
+            return self._make_header_case(name)
         if name == "empty":                              # 0 行：空输入，形状本身就是边界
             return []
         if name == "single":                             # 1 行 1 个：下标越界高发场景
@@ -67,6 +70,32 @@ class DataGenerator:
                 "neg_pos_alt": [-self.max_val if i % 2 == 0 else self.max_val for i in range(total)],  # 负正交替：符号试金石
             }[name]
         return self._reshape(flat, cols)
+
+    def _make_header_case(self, name):
+        # 首行参数模板：第一行 = 参数 N（"个数"是元数据，永远是整数），第二行 = N 个值
+        # 旋钮换语义：--n 从"每行输入数"变成"参数 N"（int=固定、范围=每次掷）；--rows 本模板用不上，自然失效
+        if name == "empty":                              # N=0：只有参数行，后面没有数据
+            return [[0]]
+        if name == "single":                             # N=1 配一个值：参数最小、数据最少（值取极值/末字符）
+            return [[1], [self.alphabet[-1] if self.alphabet else self.max_val]]
+        n = self._roll(self.cols)
+        if n == 0:
+            return [[0]]                                 # --n 0：同样只有参数行（与 empty 同构）
+        if name == "random_case":                        # 随机用例：N 掷一次，后面 N 个随机值
+            return [[n], self.generate_array(n)]
+        if self.alphabet is not None:
+            flat = self._symbol_pattern(name, n)         # 符号模式：数据行从字符集合取材（N 行仍是整数）
+        else:
+            flat = {
+                "all_same": [self.min_val] * n,
+                "already_sorted": list(range(1, n + 1)),
+                "reverse_sorted": list(range(n, 0, -1)),
+                "extreme_values": [self.min_val if i % 2 == 0 else self.max_val for i in range(n)],
+                "all_zero": [0] * n,
+                "zero_alt": [0 if i % 2 == 0 else self.max_val for i in range(n)],
+                "neg_pos_alt": [-self.max_val if i % 2 == 0 else self.max_val for i in range(n)],
+            }[name]
+        return [[n], flat]
 
     def _symbol_pattern(self, name, total):
         # 符号模式的边界形态：整数版的"升降序/极值"没有符号对应物，换成对字符集合的覆盖方式
@@ -134,3 +163,19 @@ class DataGenerator:
 #   全同（all_same）、顺/逆循环铺满（cycle/reverse_cycle）、首尾交替（alt_two）+ 规模边界（empty/single）。
 # 【单元素取末字符】single 类比整数版"取极值"：符号版取集合末字符，两个模式同一套设计语言。
 # 【alphabet or None】空字符串 "" 是"假"：--alphabet "" 会被当成没给、退回整数模式——防止空集合让 choice 崩掉。
+# ==== 学习笔记（首行参数轮本轮新增，精简版）====
+# 【形状模板】矩形是"形状旋钮 + 值旋钮"；首行参数是另一个形状模板——不是新机制，只是把同一套旋钮
+#   换一套摆放规则：--n 从"每行输入数"变成"参数 N"，值旋钮（--min/--max/--alphabet）照旧管数据行。
+#   make_case 开头一行 if self.header 分流，下游（拼串/runner/对拍）一行不改——模板内部的事不外泄。
+# 【N 是元数据不是数据】参数 N 永远是整数（它是"个数"，是结构信息）；符号模式只影响数据行的值。
+#   所以符号+header 组合下第一行仍是数字、第二行才是符号——两种旋钮的职责清清楚楚。
+# 【empty 在 header 下的对应物】矩形里"空输入"= 0 行；header 里最接近的边界 = N=0（只有参数行，
+#   后面没有数据）。[[0]] 拼出来是 "0"——待测代码读到 N=0 就该什么都不做，防御差的当场崩。
+# 【single = N=1】参数最小配数据最少，值顺手取极值（整数版 max_val / 符号版末字符），
+#   与矩形版 single 同一设计语言：规模边界 × 值域边界双押。
+# 【--rows 自然失效】两行结构没有"行数"可言：header 模式根本不看 self.rows。
+#   这是约定优于配置的代价——一个旋钮管一个模板，模板换了，管不着的旋钮就安静失效。# 【执行路径追踪】--header --n 5 下 already_sorted 组的完整路径：
+#   main:82 generate_edge_cases → generator:48 make_case → :50 if self.header（唯一分水岭）
+#   → _make_header_case → :80 n=_roll(cols)=5 → :85-93 flat=[1..5] → :94 return [[5],[1..5]]
+#   → main:86 join 成 "5\n1 2 3 4 5"（拼串代码矩形轮写的，一字未改）→ runner 喂子进程。
+#   分叉：empty 在 :77 直接 return [[0]]（掷 N/造值全不执行）；single 在 :79 return [[1],[极值]]。

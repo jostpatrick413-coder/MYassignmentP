@@ -44,6 +44,7 @@ def main():
     parser.add_argument("--min", type=int, default=1, help="随机数据最小值")
     parser.add_argument("--max", type=int, default=100, help="随机数据最大值")
     parser.add_argument("--alphabet", default=None, help="符号输入：字符集合（如 +-*/ 或 abc），给了它就不再掷整数")
+    parser.add_argument("--header", action="store_true", help="首行参数模式：第一行 N（按 --n 掷），第二行 N 个值；此模式忽略 --rows")
     parser.add_argument("--seed", type=int, default=None, help="随机种子：同一 seed 每次生成相同数据（抓 WA 后可复现）")
     parser.add_argument("--timeout", type=float, default=2.0, help="单组超时阈值（秒）")
     parser.add_argument("--check", action="store_true", help="开启对拍模式（WA / PE 检测）")
@@ -64,7 +65,7 @@ def main():
     print("=== OJ 本地样例测试器 (v1.2) ===")
     print()
 
-    generator = DataGenerator(min_val=args.min, max_val=args.max, seed=args.seed, rows=args.rows, cols=args.n, alphabet=args.alphabet)  # 数据范围与种子都来自命令行
+    generator = DataGenerator(min_val=args.min, max_val=args.max, seed=args.seed, rows=args.rows, cols=args.n, alphabet=args.alphabet, header=args.header)  # 数据范围与种子都来自命令行
     runner = CodeRunner(code_path, timeout=args.timeout)            # 待测代码与超时都来自命令行
     validator = InputValidator(args.validator) if args.validator else None  # 校验器：人写的合法性谓词
 
@@ -205,3 +206,8 @@ if __name__ == "__main__":
 #   本处流程：校验失败 → 重造数据 → 循环继续；耗尽后 else 打印跳过，continue 的是外层用例循环。
 # 【冲突报告】"[跳过] 约束与数据形状可能冲突"：校验器永远拒绝某种形状（如"必须非空" × 空数组用例），
 #   重试一万次也没用——诚实报告"可能冲突"而不是无限重试，判断权交回用户。
+# ==== 学习笔记（首行参数轮本轮新增，精简版）====
+# 【--header 只是模板开关】加首行参数模式时 main 只多两行：登记开关、传给 DataGenerator。
+#   与 --alphabet 一模一样的接法——main 的职责就是"把旋钮递给生成器"，模板内部怎么摆是 generator 的事。
+# 【开关的 help 要写代价】"--rows 失效"直接写进 --header 的帮助文案：约定优于配置，但"旋钮失效"
+#   必须预先声明，用户才知道这个开关的完整语义。
